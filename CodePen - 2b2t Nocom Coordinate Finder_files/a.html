@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+
+  <meta charset="UTF-8">
+  
+<link rel="apple-touch-icon" type="image/png" href="https://cpwebassets.codepen.io/assets/favicon/apple-touch-icon-5ae1a0698dcc2402e9712f7d01ed509a57814f994c660df9f7a952f3060705ee.png">
+<meta name="apple-mobile-web-app-title" content="CodePen">
+
+<link rel="shortcut icon" type="image/x-icon" href="https://cpwebassets.codepen.io/assets/favicon/favicon-aec34940fbc1a6e787974dcd360f2c6b63348d4b1f4e06c77743096d55480f33.ico">
+
+<link rel="mask-icon" type="image/x-icon" href="https://cpwebassets.codepen.io/assets/favicon/logo-pin-8f3771b1072e3c38bd662872f6b673a722f4b3ca2421637d5596661b4e2132cc.svg" color="#111">
+
+
+  <title>CodePen - 2b2t Nocom Coordinate Finder</title>
+  
+  
+  <link rel="stylesheet" href="a_data/bootstrap-combined.css">
+  
+<style>
+#container {
+  display: flex;
+  flex-direction: row;
+  margin-top: 20px;
+}
+
+#map {
+  margin-left: 40px;
+}
+
+#canvascontainer {
+  width: 1000px;
+  height: 800px;
+  border: 1px solid;
+}
+
+#results {
+  background-color: #834343;
+  color: #eeeeee;
+  width: 1002px;
+}
+
+#sidebar {
+  margin-left: 40px;
+}
+</style>
+
+  <script>
+  window.console = window.console || function(t) {};
+</script>
+
+  
+  
+  <script>
+  if (document.location.search.match(/type=embed/gi)) {
+    window.parent.postMessage("resize", "*");
+  }
+</script>
+
+
+</head>
+
+<body translate="no" style="user-select: none;">
+  <div id="container">
+  <div id="map">
+    <div id="canvascontainer">
+    <canvas id="canvas" width="1000" height="800"></canvas>
+    </div>
+    <div id="results"><table style="width:100%;table-layout:fixed"><tbody><tr><td>Pixel X: 934</td><td>Pixel Y: 422</td><td>Nether X: -15776</td><td>Nether Z: -10528</td><td>Overworld X: -126208</td><td>Overworld Z: -84224</td></tr></tbody></table></div>
+  </div>
+  <div id="sidebar">
+    <br>
+    <br>
+    <h1>2b2t Nocom Coordinate Finder</h1>
+    <br>
+    <h4>Pro tips: </h4>
+    <ul>
+      <li>Click on the nocom map on the left to update coords below</li>
+      <li>You can drag the map around and zoom in/out using the scroll wheel</li>
+      <li>You can also manually enter pixel values or coords below</li>
+      <li>You should search ±400 blocks in every direction when base hunting</li>
+      <li>Supports: X(-245760 to +245759), Z (-138240 to +138239)</li>
+    </ul>
+    <br>
+    <br>
+    <strong>Pixel X: </strong>
+    <input id="x" type="number" value="502" min="0" max="3840" oninput="onPixelXInput()">
+    <br>
+    <strong>Pixel Y: </strong>
+    <input id="y" type="number" value="771" min="0" max="2160" oninput="onPixelYInput()">
+    <br>
+    <hr>
+    <br>
+    <strong>Nether Coordinates:</strong><br>
+    <strong>X: </strong><input id="nether-x" value="-22688" type="number" oninput="onNetherXInput()"><br>
+    <strong>Z: </strong><input id="nether-z" value="-4944" type="number" oninput="onNetherZInput()"><br>
+    <br>
+    <strong>Overworld Coordinates:</strong><br>
+    <strong>X: </strong><input id="overworld-x" value="-181504" type="number" oninput="onOverworldXInput()"><br>
+    <strong>Z: </strong><input id="overworld-z" value="-39552" type="number" oninput="onOverworldZInput()"><br>
+    <br>
+    <hr>
+    <strong>Reference nocom image (4k): </strong> <a href="https://i.imgur.com/EvxriIt.png">Imgur mirror</a>
+    <br>
+    <br>
+    <tt>Made by Mo Beigi<br>(<a href="https://namemc.com/profile/Byte17.2">Byte17</a> on MC)</tt>
+  </div>
+</div>
+    <script src="a_data/stopExecutionOnTimeout-1b93190375e9ccc259df3a57c1abc0e6459972.js"></script>
+
+  
+      <script id="rendered-js">
+// Globals
+var canvas = document.getElementById('canvas');
+var ctx = canvas.getContext('2d');
+//var res = document.getElementById('results');
+var mapImage = new Image();
+
+const imageResolutionX = 3840;
+const imageResolutionY = 2160;
+
+// Target Canvas size
+canvas.width = 1000;
+canvas.height = 800;
+
+window.onload = function () {
+  trackTransforms(ctx);
+
+  // Zoom technique by Gavin Kistner
+  // Source: http://phrogz.net/tmp/canvas_zoom_to_cursor.html
+  var lastX = canvas.width / 2;
+  var lastY = canvas.height / 2;
+  var scaleFactor = 1.1;
+  var dragStart;
+  var dragged;
+
+  const zoom = clicks => {
+    var pt = ctx.transformedPoint(lastX, lastY);
+    ctx.translate(pt.x, pt.y);
+    var factor = Math.pow(scaleFactor, clicks);
+    ctx.scale(factor, factor);
+    ctx.translate(-pt.x, -pt.y);
+    redraw();
+  };
+
+  const redraw = () => {
+    // Clear the entire canvas
+    var p1 = ctx.transformedPoint(0, 0);
+    var p2 = ctx.transformedPoint(canvas.width, canvas.height);
+    ctx.clearRect(p1.x, p1.y, p2.x - p1.x, p2.y - p1.y);
+    ctx.drawImage(mapImage, 0, 0);
+  };
+
+  // Initial map image load from remote origin
+  mapImage.crossOrigin = "Anonymous";
+  mapImage.src = "https://i.imgur.com/EvxriIt.png";
+  mapImage.onload = function () {
+    ctx.drawImage(mapImage, 0, 0);
+
+    // Transform to center of map and redraw
+    ctx.translate(-(imageResolutionX / 2 - canvas.width / 2), -(imageResolutionY / 2 - canvas.height / 2));
+    redraw();
+  };
+
+  const handleScroll = event => {
+    var delta = event.wheelDelta ? event.wheelDelta / 40 : event.detail ? -event.detail : 0;
+    if (delta) {
+      zoom(delta);
+    }
+    return event.preventDefault() && false;
+  };
+
+  const mousedownHandler = event => {
+    document.body.style.mozUserSelect = document.body.style.webkitUserSelect = document.body.style.userSelect = 'none';
+    lastX = event.offsetX || event.pageX - canvas.offsetLeft;
+    lastY = event.offsetY || event.pageY - canvas.offsetTop;
+    dragStart = ctx.transformedPoint(lastX, lastY);
+    dragged = false;
+  };
+
+  const mouseMoveHandler = event => {
+    lastX = event.offsetX || event.pageX - canvas.offsetLeft;
+    lastY = event.offsetY || event.pageY - canvas.offsetTop;
+    dragged = true;
+    if (dragStart) {
+      var pt = ctx.transformedPoint(lastX, lastY);
+      ctx.translate(pt.x - dragStart.x, pt.y - dragStart.y);
+      redraw();
+    }
+  };
+
+  const mouseupHandler = event => {
+    dragStart = null;
+  };
+
+  // Results updater  
+  const mousePos = event => {
+    lastX = event.offsetX || event.pageX - canvas.offsetLeft;
+    lastY = event.offsetY || event.pageY - canvas.offsetTop;
+    var pt = ctx.transformedPoint(lastX, lastY);
+    var x = Math.round(pt.x);
+    var y = Math.round(pt.y);
+
+    var p = ctx.getImageData(x, y, 1, 1).data;
+    results.innerHTML = '<table style="width:100%;table-layout:fixed"><td>Pixel X: ' +
+    x + '</td><td>Pixel Y: ' + y + '</td><td>Nether X: ' +
+    getNetherXFromPixelX(x) + '</td><td>Nether Z: ' + getNetherZFromPixelY(y) + '</td><td>Overworld X: ' +
+    getOverworldXFromPixelX(x) + '</td><td>Overworld Z: ' + getOverworldZFromPixelY(y) + "</td></table>";
+    return { x, y };
+  };
+
+  const mouseClick = event => {
+    lastX = event.offsetX || event.pageX - canvas.offsetLeft;
+    lastY = event.offsetY || event.pageY - canvas.offsetTop;
+    var pt = ctx.transformedPoint(lastX, lastY);
+    var x = Math.round(pt.x);
+    var y = Math.round(pt.y);
+
+    // Set and update pixels
+    document.getElementById("x").value = x;
+    document.getElementById("y").value = y;
+    onPixelXInput();
+    onPixelYInput();
+  };
+
+  // Event listeners
+  canvas.addEventListener('DOMMouseScroll', handleScroll, false);
+  canvas.addEventListener('mousewheel', handleScroll, false);
+  canvas.addEventListener('mousedown', mousedownHandler, false);
+  canvas.addEventListener('mousemove', mouseMoveHandler, false);
+  canvas.addEventListener('mouseup', mouseupHandler, false);
+
+  canvas.addEventListener('mousemove', mousePos, false);
+  canvas.addEventListener('click', mouseClick, false);
+};
+
+// Adds ctx.getTransform() - returns an SVGMatrix
+// Adds ctx.transformedPoint(x,y) - returns an SVGPoint
+const trackTransforms = ctx => {
+  var svg = document.createElementNS("http://www.w3.org/2000/svg", 'svg');
+  var xform = svg.createSVGMatrix();
+  ctx.getTransform = function () {return xform;};
+
+  var savedTransforms = [];
+  var save = ctx.save;
+  ctx.save = function () {
+    savedTransforms.push(xform.translate(0, 0));
+    return save.call(ctx);
+  };
+  var restore = ctx.restore;
+  ctx.restore = function () {
+    xform = savedTransforms.pop();
+    return restore.call(ctx);
+  };
+
+  var scale = ctx.scale;
+  ctx.scale = function (sx, sy) {
+    xform = xform.scaleNonUniform(sx, sy);
+    return scale.call(ctx, sx, sy);
+  };
+  var rotate = ctx.rotate;
+  ctx.rotate = function (radians) {
+    xform = xform.rotate(radians * 180 / Math.PI);
+    return rotate.call(ctx, radians);
+  };
+  var translate = ctx.translate;
+  ctx.translate = function (dx, dy) {
+    xform = xform.translate(dx, dy);
+    return translate.call(ctx, dx, dy);
+  };
+  var transform = ctx.transform;
+  ctx.transform = function (a, b, c, d, e, f) {
+    var m2 = svg.createSVGMatrix();
+    m2.a = a;m2.b = b;m2.c = c;m2.d = d;m2.e = e;m2.f = f;
+    xform = xform.multiply(m2);
+    return transform.call(ctx, a, b, c, d, e, f);
+  };
+  var setTransform = ctx.setTransform;
+  ctx.setTransform = function (a, b, c, d, e, f) {
+    xform.a = a;
+    xform.b = b;
+    xform.c = c;
+    xform.d = d;
+    xform.e = e;
+    xform.f = f;
+    return setTransform.call(ctx, a, b, c, d, e, f);
+  };
+  var pt = svg.createSVGPoint();
+  ctx.transformedPoint = function (x, y) {
+    pt.x = x;pt.y = y;
+    return pt.matrixTransform(xform.inverse());
+  };
+};
+
+// Sidebar
+const baseX = -245760;
+const baseZ = -138240;
+const totalX = 491520;
+const totalZ = 276480;
+
+const xShiftPerPixel = totalX / imageResolutionX;
+const zShiftPerPixel = totalZ / imageResolutionY;
+
+const getOverworldX = () => {
+  return document.getElementById("overworld-x").value;
+};
+
+const onOverworldXInput = () => {
+  const overworldX = getOverworldX();
+  //setPixelX
+  const pixelX = Math.round((overworldX - baseX) / xShiftPerPixel);
+  setPixelX(pixelX);
+  //setNetherX
+  const netherX = Math.round(overworldX / 8);
+  setNetherX(netherX);
+};
+
+const setOverworldX = overworldX => {
+  document.getElementById("overworld-x").value = overworldX;
+};
+
+const getOverworldZ = () => {
+  return document.getElementById("overworld-z").value;
+};
+
+const onOverworldZInput = () => {
+  const overworldZ = getOverworldZ();
+  //setPixelY
+  const pixelY = Math.round((overworldZ - baseZ) / zShiftPerPixel);
+  setPixelY(pixelY);
+  //setNetherZ
+  const netherZ = Math.round(overworldZ / 8);
+  setNetherZ(netherZ);
+};
+
+const setOverworldZ = overworldZ => {
+  document.getElementById("overworld-z").value = overworldZ;
+};
+
+const getPixelX = () => {
+  return document.getElementById("x").value;
+};
+
+const onPixelXInput = () => {
+  const pixelX = getPixelX();
+  //setOverworldX
+  const overworldX = getOverworldXFromPixelX(pixelX);
+  setOverworldX(overworldX);
+  //setNetherX
+  const netherX = Math.round(overworldX / 8);
+  setNetherX(netherX);
+};
+
+const setPixelX = pixelX => {
+  document.getElementById("x").value = pixelX;
+};
+
+const getPixelY = () => {
+  return document.getElementById("y").value;
+};
+
+const onPixelYInput = () => {
+  const pixelY = getPixelY();
+  //setOverworldZ
+  const overworldZ = getOverworldZFromPixelY(pixelY);
+  setOverworldZ(overworldZ);
+  //setNetherZ
+  const netherZ = Math.round(overworldZ / 8);
+  setNetherZ(netherZ);
+};
+
+const setPixelY = pixelY => {
+  document.getElementById("y").value = pixelY;
+};
+
+const getNetherX = () => {
+  return document.getElementById("nether-x").value;
+};
+
+const onNetherXInput = () => {
+  const netherX = getNetherX();
+  //setOverworldX
+  const overworldX = Math.round(netherX * 8);
+  setOverworldX(overworldX);
+  //setPixelX
+  const pixelX = Math.round((overworldX - baseX) / xShiftPerPixel);
+  setPixelX(pixelX);
+};
+
+const setNetherX = netherX => {
+  document.getElementById("nether-x").value = netherX;
+};
+
+const getNetherZ = () => {
+  return document.getElementById("nether-z").value;
+};
+
+const onNetherZInput = () => {
+  const netherZ = getNetherZ();
+  //setOverworldZ
+  const overworldZ = Math.round(netherZ * 8);
+  setOverworldZ(overworldZ);
+  //setPixelY
+  const pixelY = Math.round((overworldZ - baseZ) / zShiftPerPixel);
+  setPixelY(pixelY);
+};
+
+const setNetherZ = netherZ => {
+  document.getElementById("nether-z").value = netherZ;
+};
+
+const getOverworldXFromPixelX = pixelX => {
+  return baseX + pixelX * xShiftPerPixel;
+};
+
+const getOverworldZFromPixelY = pixelY => {
+  return baseZ + pixelY * zShiftPerPixel;
+};
+
+const getNetherXFromPixelX = pixelX => {
+  return Math.round(getOverworldXFromPixelX(pixelX) / 8);
+};
+
+const getNetherZFromPixelY = pixelY => {
+  return Math.round(getOverworldZFromPixelY(pixelY) / 8);
+};
+//# sourceURL=pen.js
+    </script>
+
+  
+
+
+
+
+ 
+</body></html>
